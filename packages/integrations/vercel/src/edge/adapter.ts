@@ -61,12 +61,28 @@ export default function vercelEdge({
 	return {
 		name: PACKAGE_NAME,
 		hooks: {
-			'astro:config:setup': ({ command, config, updateConfig, injectScript }) => {
+			'astro:config:setup': ({ command, config, updateConfig, injectScript, logger }) => {
 				if (command === 'build' && analytics) {
 					injectScript('page', 'import "@astrojs/vercel/analytics"');
 				}
 				const outDir = getVercelOutput(config.root);
 				const viteDefine = exposeEnv(['VERCEL_ANALYTICS_ID']);
+
+				let imageConfig = getImageConfig(imageService, imagesConfig, command);
+				let imageServiceConfig = config.image.service;
+
+				// If the user is using Squoosh or Sharp, let's warn and tell them we're instead using the noop service
+				if (
+					['astro/assets/services/squoosh', 'astro/assets/services/sharp'].includes(
+						config.image.service.entrypoint
+					)
+				) {
+					logger.warn(
+						`The currently selected image service ${config.image.service.entrypoint} is not compatible with the current adapter. In order to avoid breaking your project, an alternative image service that does not process images has been applied. To suppress this warning, manually specify \`image: {service: { entrypoint: 'astro/assets/services/noop'}}\` in your project's config. Alternatively, enable Vercel's Image Optimization using \`vercel({imageService: true})\`.`
+					);
+					imageServiceConfig = { entrypoint: 'astro/assets/services/noop', config: {} };
+				}
+
 				updateConfig({
 					outDir,
 					build: {
@@ -80,7 +96,9 @@ export default function vercelEdge({
 							external: ['@vercel/nft'],
 						},
 					},
-					...getImageConfig(imageService, imagesConfig, command),
+					...(Object.keys(imageConfig).length > 0
+						? imageConfig
+						: { image: { service: imageServiceConfig } }),
 				});
 			},
 			'astro:config:done': ({ setAdapter, config }) => {

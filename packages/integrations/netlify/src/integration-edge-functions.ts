@@ -32,7 +32,21 @@ export function netlifyEdgeFunctions({ dist }: NetlifyEdgeFunctionsOptions = {})
 	return {
 		name: '@astrojs/netlify/edge-functions',
 		hooks: {
-			'astro:config:setup': ({ config, updateConfig }) => {
+			'astro:config:setup': ({ config, updateConfig, logger }) => {
+				let imageServiceConfig = config.image.service;
+
+				// If the user is using Squoosh or Sharp, let's warn and tell them we're instead using the noop service
+				if (
+					['astro/assets/services/squoosh', 'astro/assets/services/sharp'].includes(
+						config.image.service.entrypoint
+					)
+				) {
+					logger.warn(
+						`The currently selected image service ${config.image.service.entrypoint} is not compatible with the current adapter. In order to avoid breaking your project, an alternative image service that does not process images has been applied. To suppress this warning, manually specify \`image: {service: { entrypoint: 'astro/assets/services/noop'}}\` in your project's config.`
+					);
+					imageServiceConfig = { entrypoint: 'astro/assets/services/noop', config: {} };
+				}
+
 				const outDir = dist ?? new URL('./dist/', config.root);
 				updateConfig({
 					outDir,
@@ -42,6 +56,7 @@ export function netlifyEdgeFunctions({ dist }: NetlifyEdgeFunctionsOptions = {})
 						// Netlify expects .js and will always interpret as ESM
 						serverEntry: 'entry.js',
 					},
+					image: { service: imageServiceConfig },
 				});
 			},
 			'astro:config:done': ({ config, setAdapter }) => {
